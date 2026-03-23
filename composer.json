@@ -1,0 +1,45 @@
+{
+    "name": "kylin987/zzb-sdk-php",
+    "description": "PHP SDK for ZZB cinema, screen, film query APIs and ticket reporting",
+    "type": "library",
+    "license": "MIT",
+    "homepage": "https://github.com/kylin987/zzb-sdk-php",
+    "authors": [
+        {
+            "name": "kylin987"
+        }
+    ],
+    "require": {
+        "php": ">=8.1",
+        "ext-curl": "*",
+        "ext-openssl": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "ZzbSdk\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ZzbSdkTests\\": "tests/"
+        }
+    },
+    "keywords": [
+        "zzb",
+        "cinema",
+        "sdk",
+        "php"
+    ],
+    "suggest": {
+        "ext-gmp": "May help when your OpenSSL/SM2 environment depends on additional crypto support"
+    },
+    "support": {
+        "issues": "https://github.com/kylin987/zzb-sdk-php/issues",
+        "source": "https://github.com/kylin987/zzb-sdk-php"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
