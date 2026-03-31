@@ -19,8 +19,9 @@ class ZzbServiceTest extends TestCase
             'reportUrl' => 'https://test.zzb.com/report',
             'serviceUrl' => 'https://test.zzb.com/service',
             'channelCode' => 'test_channel',
-            'certFile' => '/tmp/test.pem', // 假设存在测试证书
-            'certFilePwd' => 'test_password',
+            'certId' => 'test_cert_id',
+            'appId' => 'test_app_id',
+            'interfaceKey' => 'test_interface_key',
         ]);
 
         $this->service = new ZzbService($this->config);

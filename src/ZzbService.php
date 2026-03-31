@@ -7,11 +7,27 @@ use ZzbSdk\Model\DownloadFilmInfoRequest;
 use ZzbSdk\Model\DownloadReportRecordRequest;
 use ZzbSdk\Model\GetCinemaInfoRequest;
 use ZzbSdk\Model\GetScreenInfoRequest;
+use ZzbSdk\Model\LockSeatsInfoRequest;
+use ZzbSdk\Model\QueryOrderInfoRequest;
+use ZzbSdk\Model\QuerySessionInfoRequest;
+use ZzbSdk\Model\QueryScreenSeatInfoRequest;
+use ZzbSdk\Model\QuerySeatStatusInfoRequest;
+use ZzbSdk\Model\RefundTicketRequest;
+use ZzbSdk\Model\ReleaseSeatsInfoRequest;
 use ZzbSdk\Model\ReportTicketRequest;
+use ZzbSdk\Model\SubmitOrderRequest;
 use ZzbSdk\Model\ZzbCinema;
 use ZzbSdk\Model\ZzbCinemaScreen;
 use ZzbSdk\Model\ZzbFilmPage;
+use ZzbSdk\Model\ZzbLockSeatsResult;
+use ZzbSdk\Model\ZzbQueryOrderResult;
+use ZzbSdk\Model\ZzbRefundTicketResult;
+use ZzbSdk\Model\ZzbReleaseSeatsResult;
 use ZzbSdk\Model\ZzbResult;
+use ZzbSdk\Model\ZzbScreenSeatInfo;
+use ZzbSdk\Model\ZzbSeatStatusResult;
+use ZzbSdk\Model\ZzbSessionPage;
+use ZzbSdk\Model\ZzbSubmitOrderResult;
 use ZzbSdk\Model\ZzbTicket;
 
 /**
@@ -35,7 +51,7 @@ class ZzbService
      */
     public function reportTicket(array $ticketList): ZzbResult
     {
-        $appId = $this->config->appId ?? $this->config->certId;
+        $appId = $this->resolveAppId();
         $request = ReportTicketRequest::create($appId, $this->config->channelCode, $this->config->version, $ticketList);
         $bodyData = $request->toArray();
         $signature = $this->sign($bodyData);
@@ -43,8 +59,87 @@ class ZzbService
         $url = $this->config->reportUrl . '/reportTicket';
 
         $headers = ["X-Signature: $signature"];
-        $response = $this->post($url, $bodyData, true, $headers);
+        // The reportTicket endpoint expects the business payload under the data key.
+        // Keep the signature in the request header and omit the query-style root fields.
+        $response = $this->post($url, ['data' => $bodyData['data']], true, $headers);
         return ZzbResult::fromArray($response);
+    }
+
+    /**
+     * 基于订单详情执行售票上报。
+     *
+     * @param string   $cinemaCode 影院编码
+     * @param string   $lockOrderId 锁座订单号
+     * @param string[] $ticketNos 指定上报票号，留空表示整单
+     * @param string|null $operationDatetime 操作时间，留空时取订单时间
+     * @return ZzbResult
+     */
+    public function reportTicketByLockOrderId(
+        string $cinemaCode,
+        string $lockOrderId,
+        int $startNumberByDay,
+        array $ticketNos = [],
+        ?string $operationDatetime = null
+    ): ZzbResult {
+        $orderResult = $this->queryOrderInfo($cinemaCode, $lockOrderId);
+        if (!$orderResult->isSuccess() || !$orderResult->data) {
+            throw new ZzbException('查询订单详情失败，无法执行售票上报');
+        }
+
+        $tickets = $this->buildReportTicketsFromOrderDetail($orderResult->data, $startNumberByDay, $ticketNos, 1, $operationDatetime);
+
+        return $this->reportTicket($tickets);
+    }
+
+    /**
+     * 基于订单详情执行退票。
+     *
+     * @param string   $cinemaCode 影院编码
+     * @param string   $lockOrderId 锁座订单号
+     * @param string[] $ticketNos 指定退票票号，留空表示整单
+     * @return ZzbResult<ZzbRefundTicketResult>
+     */
+    public function refundTicketByLockOrderId(string $cinemaCode, string $lockOrderId, array $ticketNos = []): ZzbResult
+    {
+        $orderResult = $this->queryOrderInfo($cinemaCode, $lockOrderId);
+        if (!$orderResult->isSuccess() || !$orderResult->data) {
+            throw new ZzbException('查询订单详情失败，无法执行退票');
+        }
+
+        $orderId = $orderResult->data->orderId ?? '';
+        if ($orderId === '') {
+            throw new ZzbException('订单详情缺少orderId，无法执行退票');
+        }
+
+        $ticketList = $this->buildRefundTicketsFromOrderDetail($orderResult->data, $ticketNos);
+
+        return $this->refundTicket($cinemaCode, $orderId, $ticketList);
+    }
+
+    /**
+     * 基于订单详情执行退票上报。
+     *
+     * @param string   $cinemaCode 影院编码
+     * @param string   $lockOrderId 锁座订单号
+     * @param string[] $ticketNos 指定上报票号，留空表示整单
+     * @param string|null $operationDatetime 操作时间，留空时取订单时间
+     * @return ZzbResult
+     */
+    public function refundReportTicketByLockOrderId(
+        string $cinemaCode,
+        string $lockOrderId,
+        int $startNumberByDay,
+        array $ticketNos = [],
+        ?string $operationDatetime = null
+    ): ZzbResult {
+        $orderResult = $this->queryOrderInfo($cinemaCode, $lockOrderId);
+        if (!$orderResult->isSuccess() || !$orderResult->data) {
+            throw new ZzbException('查询订单详情失败，无法执行退票上报');
+        }
+
+        $tickets = $this->buildReportTicketsFromOrderDetail($orderResult->data, $startNumberByDay, $ticketNos, 2, $operationDatetime);
+
+        return $this->reportTicket($tickets);
     }
 
     /**
@@ -90,6 +185,207 @@ class ZzbService
     }
 
     /**
+     * 影院排片信息查询
+     *
+     * @param string      $cinemaCode 影院编码
+     * @param string|null $startDate  开始日期，格式 yyyy-MM-dd
+     * @param string|null $endDate    结束日期，格式 yyyy-MM-dd
+     * @param int         $page       页码
+     * @return ZzbResult<ZzbSessionPage>
+     */
+    public function querySessionInfo(string $cinemaCode, ?string $startDate = null, ?string $endDate = null, int $page = 1): ZzbResult
+    {
+        $appId = $this->resolveAppId();
+        $request = QuerySessionInfoRequest::create($appId, $cinemaCode, $startDate, $endDate, $page, $this->config->version);
+        $request->signature = $this->sign($request->toArray());
+
+        $url = $this->config->serviceUrl . "/querySessionInfo";
+        $response = $this->post($url, $request->toArray());
+        $result = ZzbResult::fromArray($response);
+
+        if ($result->data) {
+            $result->data = ZzbSessionPage::fromArray($result->data, $response['pageable'] ?? null);
+        }
+
+        return $result;
+    }
+
+    /**
+     * 场次座位售出状态查询
+     *
+     * @param string   $cinemaCode 影院编码
+     * @param string   $sessionCode 场次编码
+     * @param string[] $seatStatus 过滤状态，默认 LOCKED/SOLD/UNAVAILABLE
+     * @return ZzbResult<ZzbSeatStatusResult>
+     */
+    public function querySeatStatusInfo(string $cinemaCode, string $sessionCode, array $seatStatus = ['LOCKED', 'SOLD', 'UNAVAILABLE']): ZzbResult
+    {
+        $appId = $this->resolveAppId();
+        $request = QuerySeatStatusInfoRequest::create($appId, $cinemaCode, $sessionCode, $seatStatus, $this->config->version);
+        $request->signature = $this->sign($request->toArray());
+
+        $url = $this->config->serviceUrl . "/querySeatStatusInfo";
+        $response = $this->post($url, $request->toArray());
+        $result = ZzbResult::fromArray($response);
+
+        if ($result->data) {
+            $result->data = ZzbSeatStatusResult::fromArray($result->data);
+        }
+
+        return $result;
+    }
+
+    /**
+     * 影厅座位信息查询
+     *
+     * @param string $cinemaCode 影院编码
+     * @param string $screenCode 影厅编码
+     * @return ZzbResult<ZzbScreenSeatInfo>
+     */
+    public function queryScreenSeatInfo(string $cinemaCode, string $screenCode): ZzbResult
+    {
+        $appId = $this->resolveAppId();
+        $request = QueryScreenSeatInfoRequest::create($appId, $cinemaCode, $screenCode, $this->config->version);
+        $request->signature = $this->sign($request->toArray());
+
+        $url = $this->config->serviceUrl . "/queryScreenSeatInfo";
+        $response = $this->post($url, $request->toArray());
+        $result = ZzbResult::fromArray($response);
+
+        if ($result->data) {
+            $result->data = ZzbScreenSeatInfo::fromArray($result->data);
+        }
+
+        return $result;
+    }
+
+    /**
+     * 座位锁定
+     *
+     * @param string $cinemaCode 影院编码
+     * @param string $sessionCode 场次编码
+     * @param string $appLockId 业务锁座单号
+     * @param array  $seatList 座位列表，每项至少包含 seatCode
+     * @return ZzbResult<ZzbLockSeatsResult>
+     */
+    public function lockSeatsInfo(string $cinemaCode, string $sessionCode, string $appLockId, array $seatList): ZzbResult
+    {
+        $appId = $this->resolveAppId();
+        $request = LockSeatsInfoRequest::create($appId, $cinemaCode, $sessionCode, $appLockId, $seatList, $this->config->version);
+        $request->signature = $this->sign($request->toArray());
+
+        $url = $this->config->serviceUrl . "/lockSeatsInfo";
+        $response = $this->post($url, $request->toArray());
+        $result = ZzbResult::fromArray($response);
+
+        if ($result->data) {
+            $result->data = ZzbLockSeatsResult::fromArray($result->data);
+        }
+
+        return $result;
+    }
+
+    /**
+     * 座位解锁
+     *
+     * @param string $cinemaCode 影院编码
+     * @param string $lockOrderId 锁座订单号
+     * @param int    $count 解锁座位数
+     * @return ZzbResult<ZzbReleaseSeatsResult>
+     */
+    public function releaseSeatsInfo(string $cinemaCode, string $lockOrderId, int $count): ZzbResult
+    {
+        $appId = $this->resolveAppId();
+        $request = ReleaseSeatsInfoRequest::create($appId, $cinemaCode, $lockOrderId, $count, $this->config->version);
+        $request->signature = $this->sign($request->toArray());
+
+        $url = $this->config->serviceUrl . "/releaseSeatsInfo";
+        $response = $this->post($url, $request->toArray());
+        $result = ZzbResult::fromArray($response);
+
+        if ($result->data) {
+            $result->data = ZzbReleaseSeatsResult::fromArray($result->data);
+        }
+
+        return $result;
+    }
+
+    /**
+     * 确认订单交易
+     *
+     * @param string $lockOrderId 锁座订单号
+     * @param string $cinemaCode 影院编码
+     * @param string $sessionCode 场次编码
+     * @param array  $seatList 座位列表
+     * @return ZzbResult<ZzbSubmitOrderResult>
+     */
+    public function submitOrder(string $lockOrderId, string $cinemaCode, string $sessionCode, array $seatList): ZzbResult
+    {
+        $appId = $this->resolveAppId();
+        $request = SubmitOrderRequest::create($appId, $lockOrderId, $cinemaCode, $sessionCode, $seatList, $this->config->version);
+        $request->signature = $this->sign($request->toArray());
+
+        $url = $this->config->serviceUrl . "/submitOrder";
+        $response = $this->post($url, $request->toArray());
+        $result = ZzbResult::fromArray($response);
+
+        if ($result->data) {
+            $result->data = ZzbSubmitOrderResult::fromArray($result->data);
+        }
+
+        return $result;
+    }
+
+    /**
+     * 订单信息查询
+     *
+     * @param string $cinemaCode 影院编码
+     * @param string $lockOrderId 锁座订单号
+     * @return ZzbResult<ZzbQueryOrderResult>
+     */
+    public function queryOrderInfo(string $cinemaCode, string $lockOrderId): ZzbResult
+    {
+        $appId = $this->resolveAppId();
+        $request = QueryOrderInfoRequest::create($appId, $cinemaCode, $lockOrderId, $this->config->version);
+        $request->signature = $this->sign($request->toArray());
+
+        $url = $this->config->serviceUrl . "/queryOrderInfo";
+        $response = $this->post($url, $request->toArray());
+        $result = ZzbResult::fromArray($response);
+
+        if ($result->data) {
+            $result->data = ZzbQueryOrderResult::fromArray($result->data);
+        }
+
+        return $result;
+    }
+
+    /**
+     * 退票
+     *
+     * @param string $cinemaCode 影院编码
+     * @param string $orderId 订单号
+     * @param array  $ticketList 票列表，每项至少包含 ticketNo
+     * @return ZzbResult<ZzbRefundTicketResult>
+     */
+    public function refundTicket(string $cinemaCode, string $orderId, array $ticketList): ZzbResult
+    {
+        $appId = $this->resolveAppId();
+        $request = RefundTicketRequest::create($appId, $cinemaCode, $orderId, $ticketList, $this->config->version);
+        $request->signature = $this->sign($request->toArray());
+
+        $url = $this->config->serviceUrl . "/refundTicket";
+        $response = $this->post($url, $request->toArray());
+        $result = ZzbResult::fromArray($response);
+
+        if ($result->data) {
+            $result->data = ZzbRefundTicketResult::fromArray($result->data);
+        }
+
+        return $result;
+    }
+
+    /**
      * 影院信息下载
      *
      * @param string $cinemaCode 影院编码
@@ -97,7 +393,7 @@ class ZzbService
      */
     public function getCinemaInfo(string $cinemaCode): ZzbResult
     {
-        $appId = $this->config->appId ?? $this->config->certId;
+        $appId = $this->resolveAppId();
         $request = GetCinemaInfoRequest::create($appId, $cinemaCode, $this->config->version);
         $request->signature = $this->sign($request->toArray());
 
@@ -154,7 +450,7 @@ class ZzbService
             // 将请求报文原文与 password、timestamp 作为同级字段，按键名升序序列化后做 SM3，再 Base64。
             $contentData['password'] = $this->config->interfaceKey;
             $contentData = $this->sortSigningData($contentData);
-            $content = json_encode($contentData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $content = json_encode($contentData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
 
             $digest = openssl_digest($content, 'sm3', true);
             if ($digest === false) {
@@ -165,7 +461,7 @@ class ZzbService
         }
 
         $contentData = $this->sortSigningData($contentData);
-        $content = json_encode($contentData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $content = json_encode($contentData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
 
         // 尝试使用 OpenSSL 3 的 SM2 算法
         $privateKey = $this->loadPrivateKey();
@@ -271,6 +567,103 @@ class ZzbService
         return array_keys($data) !== range(0, count($data) - 1);
     }
 
+    private function resolveAppId(): string
+    {
+        $appId = $this->config->appId ?? $this->config->certId;
+        if (!is_string($appId) || $appId === '') {
+            throw new ZzbException('缺少 appId/certId 配置');
+        }
+
+        return $appId;
+    }
+
+    /**
+     * @param ZzbQueryOrderResult $orderDetail
+     * @param string[] $ticketNos
+     * @return ZzbTicket[]
+     */
+    private function buildReportTicketsFromOrderDetail(
+        ZzbQueryOrderResult $orderDetail,
+        int $startNumberByDay,
+        array $ticketNos = [],
+        int $operation = 1,
+        ?string $operationDatetime = null
+    ): array {
+        $ticketNos = array_values(array_filter(array_map('strval', $ticketNos)));
+        $tickets = [];
+        $cinemaCode = $orderDetail->cinemaCode ?? '';
+
+        foreach ($orderDetail->ticketList as $item) {
+            $ticketNo = $item->ticketNo ?? '';
+            if ($ticketNo === '') {
+                continue;
+            }
+            if ($ticketNos && !in_array($ticketNo, $ticketNos, true)) {
+                continue;
+            }
+
+            $ticket = new ZzbTicket();
+            $ticket->numberByDay = $startNumberByDay + count($tickets);
+            $ticket->parentChannelCode = $cinemaCode;
+            $ticket->childChannelCode = '00000000';
+            $ticket->ticketNo = $ticketNo;
+            $ticket->cinemaCode = $cinemaCode;
+            $ticket->screenCode = $orderDetail->screenCode ?? '';
+            $ticket->seatCode = $item->seatCode ?? '';
+            $ticket->filmCode = $orderDetail->filmCode ?? '';
+            $ticket->sessionCode = $orderDetail->sessionCode ?? '';
+            $ticket->sessionDatetime = $orderDetail->sessionDatetime ?? '';
+            $ticket->ticketPrice = (float) ($item->ticketPrice ?? 0);
+            $ticket->screenServiceFee = (float) ($item->screenServiceFee ?? 0);
+            $ticket->netServiceFee = (float) ($item->netServiceFee ?? 0);
+            $ticket->saleChannelCode = $this->config->channelCode;
+            $ticket->operation = $operation;
+            if ($operationDatetime !== null && $operationDatetime !== '') {
+                $ticket->operationDatetime = $operationDatetime;
+            } elseif ($operation === 2) {
+                $ticket->operationDatetime = date('Y-m-d H:i:s');
+            } else {
+                $ticket->operationDatetime = $orderDetail->orderTime ?? $orderDetail->sessionDatetime ?? '';
+            }
+            $tickets[] = $ticket;
+        }
+
+        if (!$tickets) {
+            throw new ZzbException('未匹配到可上报的ticketNo');
+        }
+
+        return $tickets;
+    }
+
+    /**
+     * @param ZzbQueryOrderResult $orderDetail
+     * @param string[] $ticketNos
+     * @return array<int,array{ticketNo:string}>
+     */
+    private function buildRefundTicketsFromOrderDetail(ZzbQueryOrderResult $orderDetail, array $ticketNos = []): array
+    {
+        $ticketNos = array_values(array_filter(array_map('strval', $ticketNos)));
+        $tickets = [];
+
+        foreach ($orderDetail->ticketList as $item) {
+            $ticketNo = $item->ticketNo ?? '';
+            if ($ticketNo === '') {
+                continue;
+            }
+            if ($ticketNos && !in_array($ticketNo, $ticketNos, true)) {
+                continue;
+            }
+
+            $tickets[] = ['ticketNo' => $ticketNo];
+        }
+
+        if (!$tickets) {
+            throw new ZzbException('未匹配到可退票的ticketNo');
+        }
+
+        return $tickets;
+    }
+
     /**
      * 发送 POST 请求
      *
@@ -289,7 +682,7 @@ class ZzbService
         $ch = $this->initCurl();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION));
 
         $defaultHeaders = ['Content-Type: application/json'];
         $mergedHeaders = array_merge($defaultHeaders, $headers);

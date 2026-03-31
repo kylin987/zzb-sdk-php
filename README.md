@@ -5,6 +5,17 @@
 - `queryCinemaInfo`
 - `queryScreenInfo`
 - `queryFilmInfo`
+- `querySessionInfo`
+- `queryScreenSeatInfo`
+- `querySeatStatusInfo`
+- `lockSeatsInfo`
+- `releaseSeatsInfo`
+- `submitOrder`
+- `queryOrderInfo`
+- `refundTicket`
+- `reportTicketByLockOrderId`
+- `refundTicketByLockOrderId`
+- `refundReportTicketByLockOrderId`
 
 同时保留票房上报与数据比对文件下载能力。
 
@@ -25,6 +36,17 @@ composer require kylin987/zzb-sdk-php
 - 影院信息查询
 - 影厅信息查询
 - 影片信息查询
+- 影院排片信息查询
+- 影厅座位信息查询
+- 场次座位售出状态查询
+- 座位锁定
+- 座位解锁
+- 确认订单交易
+- 订单信息查询
+- 退票
+- 基于锁座订单号的售票上报
+- 基于锁座订单号的退票
+- 基于锁座订单号的退票上报
 - 票房上报
 - 比对文件下载
 
@@ -57,9 +79,9 @@ if ($result->isSuccess()) {
 }
 ```
 
-## API Usage
+## API Examples
 
-以下示例均基于同一组初始化配置：
+以下示例默认你已经准备好了同一份 `$config` 和 `$service`：
 
 ```php
 <?php
@@ -83,84 +105,315 @@ $config = new Config([
 $service = new ZzbService($config);
 ```
 
-### Config 字段说明
-
-- `serviceUrl`：信息下载类接口地址，例如影院、影厅、影片查询。
-- `reportUrl`：数据上报类接口地址，例如票房上报。
-- `channelCode`：渠道编码，用于构造业务请求。
-- `certId`：证书标识，用于证书签名场景。
-- `appId`：应用标识，当前查询接口通常会使用。
-- `interfaceKey`：查询接口使用的摘要签名密钥。
-- `certFile`：客户端证书或私钥文件路径。
-- `certFilePwd`：证书或私钥密码。
-- `trustFile`：服务端 CA 或信任证书路径。
-- `version`：接口版本号，默认 `1.0`。
-- `proxy`：可选代理地址；未配置时默认禁用系统代理环境变量。
-
-建议通过环境变量或部署配置注入敏感信息，不要将真实地址、证书、密码和接口参数直接写入仓库。
-
-### `getCinemaInfo`
-
-用途：查询单个影院信息。  
-所需数据：`cinemaCode`。
+### getCinemaInfo
 
 ```php
+<?php
+
 $result = $service->getCinemaInfo('your-cinema-code');
 
 if ($result->isSuccess()) {
-    var_dump($result->data); // ZzbCinema
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
 }
 ```
 
-### `getScreenInfo`
-
-用途：查询指定影院下的影厅信息。  
-所需数据：`cinemaCode`。
+### getScreenInfo
 
 ```php
+<?php
+
 $result = $service->getScreenInfo('your-cinema-code');
 
 if ($result->isSuccess()) {
-    var_dump($result->data); // ZzbCinemaScreen
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
 }
 ```
 
-### `downloadFilmInfo`
-
-用途：按影院和上映日期范围查询影片信息。  
-所需数据：`cinemaCode`、`startPublishDate`、`endPublishDate`、`page`。
+### downloadFilmInfo
 
 ```php
-$result = $service->downloadFilmInfo('your-cinema-code', '2026-03-01', '2026-03-31', 1);
+<?php
+
+$result = $service->downloadFilmInfo('your-cinema-code', '2026-01-01', '2026-12-31', 1);
 
 if ($result->isSuccess()) {
-    var_dump($result->data); // ZzbFilmPage
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
 }
 ```
 
-### `reportTicket`
-
-用途：上报票房数据。  
-所需数据：一个或多个 `ZzbTicket` 对象，每个对象通常需要以下字段：
-
-- `numberByDay`
-- `parentChannelCode`
-- `childChannelCode`
-- `ticketNo`
-- `cinemaCode`
-- `screenCode`
-- `seatCode`
-- `filmCode`
-- `sessionCode`
-- `sessionDatetime`
-- `ticketPrice`
-- `screenServiceFee`
-- `netServiceFee`
-- `saleChannelCode`
-- `operation`
-- `operationDatetime`
+### querySessionInfo
 
 ```php
+<?php
+
+$result = $service->querySessionInfo('your-cinema-code', '2026-03-31', '2026-03-31', 1);
+
+if ($result->isSuccess()) {
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
+}
+```
+
+已验证可用参数示例：
+
+```php
+<?php
+
+$result = $service->querySessionInfo('your-cinema-code', '2026-04-01', '2026-04-02', 1);
+```
+
+已验证返回示例：
+
+```json
+{
+  "code": "200",
+  "status": "success",
+  "pageable": {
+    "totalPages": 5,
+    "page": 1,
+    "size": 6
+  },
+  "data": {
+    "cinemaCode": "your-cinema-code",
+    "sessionList": [
+      {
+        "sessionCode": "your-session-code",
+        "lowestPrice": 30.0,
+        "standardPrice": 50.0,
+        "netServiceFee": 2.0,
+        "stopSellTime": "2026-04-02 08:00:00",
+        "screenCode": "your-screen-code",
+        "filmCode": "your-film-code",
+        "filmName": "your-film-name",
+        "sessionDatetime": "2026-04-02 08:00:00",
+        "duration": 120,
+        "layoutVersion": "座位图V1",
+        "sectionList": [
+          {
+            "regionCode": "CQ1",
+            "regionName": "一楼",
+            "sectionCode": "FQ1",
+            "sectionName": "普通区",
+            "sectionPrice": 60.0,
+            "screenServiceFee": 10.0
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### querySeatStatusInfo
+
+```php
+<?php
+
+$result = $service->querySeatStatusInfo('your-cinema-code', 'your-session-code', ['LOCKED', 'SOLD']);
+
+if ($result->isSuccess()) {
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
+}
+```
+
+已验证返回示例：
+
+```json
+{
+  "code": "200",
+  "status": "success",
+  "data": {
+    "cinemaCode": "your-cinema-code",
+    "sessionCode": "your-session-code",
+    "seatList": []
+  }
+}
+```
+
+### queryScreenSeatInfo
+
+```php
+<?php
+
+$result = $service->queryScreenSeatInfo('your-cinema-code', 'your-screen-code');
+
+if ($result->isSuccess()) {
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
+}
+```
+
+### lockSeatsInfo
+
+```php
+<?php
+
+$result = $service->lockSeatsInfo(
+    'your-cinema-code',
+    'your-session-code',
+    'your-app-lock-id',
+    [
+        ['seatCode' => 'your-seat-code-1'],
+        ['seatCode' => 'your-seat-code-2'],
+    ]
+);
+
+if ($result->isSuccess()) {
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
+}
+```
+
+### submitOrder
+
+```php
+<?php
+
+$result = $service->submitOrder(
+    'your-lock-order-id',
+    'your-cinema-code',
+    'your-session-code',
+    [
+        [
+            'seatCode' => 'your-seat-code',
+            'regionCode' => 'your-region-code',
+            'sectionCode' => 'your-section-code',
+            'ticketPrice' => 60.00,
+            'screenServiceFee' => 10.00,
+            'netServiceFee' => 0.00,
+        ],
+    ]
+);
+
+if ($result->isSuccess()) {
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
+}
+```
+
+### queryOrderInfo
+
+```php
+<?php
+
+$result = $service->queryOrderInfo('your-cinema-code', 'your-lock-order-id');
+
+if ($result->isSuccess()) {
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
+}
+```
+
+### refundTicket
+
+```php
+<?php
+
+$result = $service->refundTicket(
+    'your-cinema-code',
+    'your-order-id',
+    [
+        ['ticketNo' => 'your-ticket-no-1'],
+        ['ticketNo' => 'your-ticket-no-2'],
+    ]
+);
+
+if ($result->isSuccess()) {
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
+}
+```
+
+### reportTicketByLockOrderId
+
+```php
+<?php
+
+$result = $service->reportTicketByLockOrderId('your-cinema-code', 'your-lock-order-id', 10001);
+
+if ($result->isSuccess()) {
+    var_dump($result->traceId ?? null);
+} else {
+    var_dump($result->code, $result->status);
+}
+```
+
+### refundTicketByLockOrderId
+
+```php
+<?php
+
+$result = $service->refundTicketByLockOrderId('your-cinema-code', 'your-lock-order-id');
+
+if ($result->isSuccess()) {
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
+}
+```
+
+### refundReportTicketByLockOrderId
+
+```php
+<?php
+
+$result = $service->refundReportTicketByLockOrderId(
+    'your-cinema-code',
+    'your-lock-order-id',
+    10001,
+    ['your-ticket-no'],
+    '2026-03-31 14:30:00'
+);
+
+if ($result->isSuccess()) {
+    var_dump($result->traceId ?? null);
+} else {
+    var_dump($result->code, $result->status);
+}
+```
+
+### releaseSeatsInfo
+
+```php
+<?php
+
+$result = $service->releaseSeatsInfo('your-cinema-code', 'your-lock-order-id', 2);
+
+if ($result->isSuccess()) {
+    var_dump($result->data);
+} else {
+    var_dump($result->code, $result->status);
+}
+```
+
+### downloadReportRecord
+
+```php
+<?php
+
+$content = $service->downloadReportRecord('2026-03-01', '2026-03-31');
+var_dump($content);
+```
+
+### reportTicket
+
+```php
+<?php
+
 use ZzbSdk\Model\ZzbTicket;
 
 $ticket = new ZzbTicket();
@@ -173,29 +426,24 @@ $ticket->screenCode = 'your-screen-code';
 $ticket->seatCode = 'your-seat-code';
 $ticket->filmCode = 'your-film-code';
 $ticket->sessionCode = 'your-session-code';
-$ticket->sessionDatetime = '2026-03-24 19:00:00';
-$ticket->ticketPrice = 50.99;
-$ticket->screenServiceFee = 3.99;
-$ticket->netServiceFee = 5.99;
+$ticket->sessionDatetime = '2026-03-31 21:20:00';
+$ticket->ticketPrice = 30.00;
+$ticket->screenServiceFee = 0.00;
+$ticket->netServiceFee = 8.00;
 $ticket->saleChannelCode = 'your-sale-channel-code';
 $ticket->operation = 1;
-$ticket->operationDatetime = '2026-03-24 18:30:00';
+$ticket->operationDatetime = '2026-03-31 21:20:00';
 
 $result = $service->reportTicket([$ticket]);
+
+if ($result->isSuccess()) {
+    var_dump($result->traceId ?? null);
+} else {
+    var_dump($result->code, $result->status);
+}
 ```
 
-说明：该接口属于写操作，请仅在已确认测试环境、测试证书和测试数据可用时调用。
-
-### `downloadReportRecord`
-
-用途：下载指定放映日期范围的数据比对文件。  
-所需数据：`startShowDate`、`endShowDate`。
-
-```php
-$content = $service->downloadReportRecord('2026-03-01', '2026-03-02');
-```
-
-说明：当前仓库默认配置对应的现网地址上，`/data/downloadReportRecord` 路径未验证可用，使用前请先确认上游实际接口路径。
+退票上报同样使用 `reportTicket`，只需将单票的 `operation` 改为 `2`，并传入真实退票时间作为 `operationDatetime`。
 
 ## Query API Notes
 
@@ -209,6 +457,99 @@ $content = $service->downloadReportRecord('2026-03-01', '2026-03-02');
 - `signature = Base64(SM3(json_string))`
 
 这套行为来自现网验证结果，可能与标准 PDF 中的路径定义不同。
+
+## reportTicket API Notes
+
+`reportTicket` 与当前现网 `query*` 接口的报文结构不同，不能直接复用查询接口的完整根级结构。
+
+当前联调结果表明：
+
+- 请求仍然走 HTTPS 双向 TLS
+- 签名仍然通过 `X-Signature` 请求头传递
+- 请求体不接受根级字段 `appId`、`version`、`timestamp`、`signature`
+- 请求体应发送为 `data` 包裹的业务结构
+
+当前 `reportTicket` 实际发送结构如下：
+
+```json
+{
+  "data": {
+    "sendChannelCode": "your-channel-code",
+    "ticketList": [
+      {
+        "numberByDay": 1,
+        "parentChannelCode": "your-parent-channel-code",
+        "childChannelCode": "your-child-channel-code",
+        "ticketNo": "your-ticket-no",
+        "cinemaCode": "your-cinema-code",
+        "screenCode": "your-screen-code",
+        "seatCode": "your-seat-code",
+        "filmCode": "your-film-code",
+        "sessionCode": "your-session-code",
+        "sessionDatetime": "2026-03-31 21:20:00",
+        "ticketPrice": 30.00,
+        "screenServiceFee": 0.00,
+        "netServiceFee": 8.00,
+        "saleChannelCode": "your-sale-channel-code",
+        "operation": 1,
+        "operationDatetime": "2026-03-31 21:20:00"
+      }
+    ]
+  }
+}
+```
+
+对应 PHP 调用方式保持不变：
+
+```php
+<?php
+
+use ZzbSdk\Config;
+use ZzbSdk\Model\ZzbTicket;
+use ZzbSdk\ZzbService;
+
+$config = new Config([
+    'serviceUrl' => 'https://your-host/serverapp',
+    'reportUrl' => 'https://your-host/serverapp',
+    'channelCode' => 'your-channel-code',
+    'certId' => 'your-cert-id',
+    'appId' => 'your-app-id',
+    'interfaceKey' => 'your-interface-key',
+    'certFile' => '/path/to/private_key.pem',
+    'certFilePwd' => 'your-cert-password',
+    'trustFile' => '/path/to/rootcert.pem',
+    'version' => '1.0',
+]);
+
+$ticket = new ZzbTicket();
+$ticket->numberByDay = 1;
+$ticket->parentChannelCode = 'your-parent-channel-code';
+$ticket->childChannelCode = 'your-child-channel-code';
+$ticket->ticketNo = 'your-ticket-no';
+$ticket->cinemaCode = 'your-cinema-code';
+$ticket->screenCode = 'your-screen-code';
+$ticket->seatCode = 'your-seat-code';
+$ticket->filmCode = 'your-film-code';
+$ticket->sessionCode = 'your-session-code';
+$ticket->sessionDatetime = '2026-03-31 21:20:00';
+$ticket->ticketPrice = 30.00;
+$ticket->screenServiceFee = 0.00;
+$ticket->netServiceFee = 8.00;
+$ticket->saleChannelCode = 'your-sale-channel-code';
+$ticket->operation = 1;
+$ticket->operationDatetime = '2026-03-31 21:20:00';
+
+$service = new ZzbService($config);
+$result = $service->reportTicket([$ticket]);
+```
+
+说明：
+
+- `sendChannelCode` 来自 SDK 配置中的 `channelCode`
+- `saleChannelCode` 由业务侧票务数据决定
+- `reportTicketByLockOrderId` / `refundReportTicketByLockOrderId` 需要业务侧传入连续维护的 `numberByDay` 起始值
+- `reportTicket` 当前为现网兼容实现，不建议直接套用查询接口报文结构
+- 如果后续上游切换正式标准报文，建议为 `reportTicket` 增加独立兼容模式
 
 ## Running Tests
 
