@@ -10,14 +10,16 @@ use ZzbSdk\ZzbService;
 
 class Netsale2025ServiceTest extends TestCase
 {
+    private const CHANNEL_CODE = '12345678';
+
     public function testReportTicketUsesNetsale2025RootPayload(): void
     {
         $service = new CapturingZzbService(new Config([
             'mode' => Config::MODE_NETSALE_2025,
             'reportUrl' => 'https://panda.zgdypw.cn:8087/report',
             'serviceUrl' => 'https://panda.zgdypw.cn:8085/service',
-            'channelCode' => '98265004',
-            'certId' => '98265004',
+            'channelCode' => self::CHANNEL_CODE,
+            'certId' => self::CHANNEL_CODE,
         ]));
 
         $ticket = new ZzbTicket();
@@ -26,7 +28,7 @@ class Netsale2025ServiceTest extends TestCase
         $ticket->childChannelCode = '00000000';
         $ticket->ticketNo = '130904010Ba0102';
         $ticket->cinemaCode = '13090401';
-        $ticket->saleChannelCode = '98265004';
+        $ticket->saleChannelCode = self::CHANNEL_CODE;
         $ticket->operation = 1;
 
         $result = $service->reportTicket([$ticket]);
@@ -34,7 +36,7 @@ class Netsale2025ServiceTest extends TestCase
         $this->assertTrue($result->isSuccess());
         $this->assertSame('https://panda.zgdypw.cn:8087/report/reportTicket', $service->lastPost['url']);
         $this->assertSame([], $service->lastPost['headers']);
-        $this->assertSame('98265004', $service->lastPost['data']['sendChannelCode']);
+        $this->assertSame(self::CHANNEL_CODE, $service->lastPost['data']['sendChannelCode']);
         $this->assertArrayHasKey('ticketList', $service->lastPost['data']);
         $this->assertArrayNotHasKey('data', $service->lastPost['data']);
         $this->assertSame('130904010Ba0102', $service->lastPost['data']['ticketList'][0]['ticketNo']);
@@ -47,8 +49,8 @@ class Netsale2025ServiceTest extends TestCase
             'mode' => Config::MODE_NETSALE_2025,
             'reportUrl' => 'https://panda.zgdypw.cn:8087/report',
             'serviceUrl' => 'https://panda.zgdypw.cn:8085/service',
-            'channelCode' => '98265004',
-            'certId' => '98265004',
+            'channelCode' => self::CHANNEL_CODE,
+            'certId' => self::CHANNEL_CODE,
             'vstkSigner' => $signer,
         ]));
         $service->rawResponse = "zip-bytes";
@@ -56,22 +58,22 @@ class Netsale2025ServiceTest extends TestCase
         $content = $service->downloadReportRecord('2026-06-01', '2026-06-02');
 
         $this->assertSame('zip-bytes', $content);
-        $this->assertSame('98265004', $signer->certId);
+        $this->assertSame(self::CHANNEL_CODE, $signer->certId);
 
         $plain = json_decode($signer->plainText, true);
         $this->assertSame([
-            'sendChannelCode' => '98265004',
+            'sendChannelCode' => self::CHANNEL_CODE,
             'startShowDate' => '2026-06-01',
             'endShowDate' => '2026-06-02',
         ], $plain['data']);
-        $this->assertSame('98265004', $plain['sendChannelCode']);
+        $this->assertSame(self::CHANNEL_CODE, $plain['sendChannelCode']);
         $this->assertIsInt($plain['timestamp']);
         $this->assertGreaterThan(1000000000000, $plain['timestamp']);
 
         $this->assertSame('https://panda.zgdypw.cn:8085/service/data/downloadReportRecord', $service->lastPost['url']);
         $this->assertFalse($service->lastPost['decodeJson']);
         $this->assertSame([
-            'sendChannelCode' => '98265004',
+            'sendChannelCode' => self::CHANNEL_CODE,
             'startShowDate' => '2026-06-01',
             'endShowDate' => '2026-06-02',
             'signature' => 'U0lHTkVE',

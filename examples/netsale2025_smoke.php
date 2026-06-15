@@ -29,13 +29,13 @@ function main(): void
         return;
     }
 
-    $baseDir = getenv('NETSALE_BASE_DIR') ?: '/Users/wind/codex/网售';
-    $channelCode = getenv('NETSALE_CHANNEL_CODE') ?: '98265004';
+    $baseDir = getenv('NETSALE_BASE_DIR') ?: getcwd();
+    $channelCode = getenv('NETSALE_CHANNEL_CODE') ?: '12345678';
     $certId = getenv('NETSALE_CERT_ID') ?: $channelCode;
     $reportUrl = getenv('NETSALE_REPORT_URL') ?: 'https://panda.zgdypw.cn:8087/report/report';
     $serviceUrl = getenv('NETSALE_SERVICE_URL') ?: 'https://panda.zgdypw.cn:8085/service';
-    $certFile = getenv('NETSALE_CERT_FILE') ?: $baseDir . '/zzb_98265004_cert.pem';
-    $keyFile = getenv('NETSALE_KEY_FILE') ?: $baseDir . '/zzb_98265004_key.pem';
+    $certFile = getenv('NETSALE_CERT_FILE') ?: $baseDir . '/client_cert.pem';
+    $keyFile = getenv('NETSALE_KEY_FILE') ?: $baseDir . '/client_key.pem';
     $trustFile = getenv('NETSALE_TRUST_FILE') ?: $baseDir . '/zzb_rootcert.pem';
     $startDate = $options['start-date'] ?? getenv('NETSALE_START_DATE') ?: date('Y-m-d', strtotime('-1 day'));
     $endDate = $options['end-date'] ?? getenv('NETSALE_END_DATE') ?: $startDate;

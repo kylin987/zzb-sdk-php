@@ -105,10 +105,10 @@ $config = new Config([
     'mode' => Config::MODE_NETSALE_2025,
     'reportUrl' => 'https://panda.zgdypw.cn:8087/report',
     'serviceUrl' => 'https://panda.zgdypw.cn:8085/service',
-    'channelCode' => '98265004',
-    'certId' => '98265004',
-    'certFile' => '/path/to/zzb_98265004_cert.pem',
-    'keyFile' => '/path/to/zzb_98265004_key.pem',
+    'channelCode' => 'YOUR_CHANNEL_CODE',
+    'certId' => 'YOUR_CERT_ID',
+    'certFile' => '/path/to/client_cert.pem',
+    'keyFile' => '/path/to/client_key.pem',
     'trustFile' => '/path/to/zzb_rootcert.pem',
     'vstkSigner' => $vstkSigner,
 ]);
@@ -122,7 +122,7 @@ $service = new ZzbService($config);
 
 ```json
 {
-  "sendChannelCode": "98265004",
+  "sendChannelCode": "YOUR_CHANNEL_CODE",
   "ticketList": []
 }
 ```
@@ -134,11 +134,11 @@ $service = new ZzbService($config);
 ```json
 {
   "data": {
-    "sendChannelCode": "98265004",
+    "sendChannelCode": "YOUR_CHANNEL_CODE",
     "startShowDate": "2026-06-01",
     "endShowDate": "2026-06-02"
   },
-  "sendChannelCode": "98265004",
+  "sendChannelCode": "YOUR_CHANNEL_CODE",
   "timestamp": 1780000000000
 }
 ```
@@ -147,7 +147,7 @@ $service = new ZzbService($config);
 
 ```json
 {
-  "sendChannelCode": "98265004",
+  "sendChannelCode": "YOUR_CHANNEL_CODE",
   "startShowDate": "2026-06-01",
   "endShowDate": "2026-06-02",
   "signature": "P7_ATTACH_SIGNATURE"
