@@ -29,6 +29,7 @@ use ZzbSdk\Model\ZzbSeatStatusResult;
 use ZzbSdk\Model\ZzbSessionPage;
 use ZzbSdk\Model\ZzbSubmitOrderResult;
 use ZzbSdk\Model\ZzbTicket;
+use ZzbSdk\Signer\VstkSignerInterface;
 
 /**
  * 专资办接口服务
@@ -51,6 +52,20 @@ class ZzbService
      */
     public function reportTicket(array $ticketList): ZzbResult
     {
+        if ($this->isNetsale2025Mode()) {
+            $url = $this->config->reportUrl . '/reportTicket';
+            $payload = [
+                'sendChannelCode' => $this->requireConfigString($this->config->channelCode, 'channelCode'),
+                'ticketList' => array_map(
+                    fn($ticket) => $ticket instanceof ZzbTicket ? $ticket->toArray() : $ticket,
+                    $ticketList
+                ),
+            ];
+
+            $response = $this->post($url, $payload);
+            return ZzbResult::fromArray($response);
+        }
+
         $appId = $this->resolveAppId();
         $request = ReportTicketRequest::create($appId, $this->config->channelCode, $this->config->version, $ticketList);
         $bodyData = $request->toArray();
@@ -151,6 +166,33 @@ class ZzbService
      */
     public function downloadReportRecord(string $startShowDate, string $endShowDate): string
     {
+        if ($this->isNetsale2025Mode()) {
+            $channelCode = $this->requireConfigString($this->config->channelCode, 'channelCode');
+            $timestamp = $this->millisecondsTimestamp();
+            $signPlain = [
+                'data' => [
+                    'startShowDate' => $startShowDate,
+                    'endShowDate' => $endShowDate,
+                ],
+                'sendChannelCode' => $channelCode,
+                'timestamp' => $timestamp,
+            ];
+            $plainText = json_encode($signPlain, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
+            if ($plainText === false) {
+                throw new ZzbException('数据比对文件下载签名原文序列化失败');
+            }
+
+            $payload = [
+                'sendChannelCode' => $channelCode,
+                'startShowDate' => $startShowDate,
+                'endShowDate' => $endShowDate,
+                'signature' => $this->p7AttachSign($plainText),
+            ];
+
+            $url = $this->config->serviceUrl . "/data/downloadReportRecord";
+            return $this->post($url, $payload, false);
+        }
+
         $request = DownloadReportRecordRequest::create($this->config->certId, $this->config->channelCode, $startShowDate, $endShowDate, $this->config->version);
         $request->signature = $this->sign($request->toArray());
 
@@ -577,6 +619,51 @@ class ZzbService
         return $appId;
     }
 
+    private function isNetsale2025Mode(): bool
+    {
+        return $this->config->mode === Config::MODE_NETSALE_2025;
+    }
+
+    private function millisecondsTimestamp(): int
+    {
+        return (int) floor(microtime(true) * 1000);
+    }
+
+    private function p7AttachSign(string $plainText): string
+    {
+        $signer = $this->config->vstkSigner;
+        if (!$signer instanceof VstkSignerInterface) {
+            throw new ZzbException('netsale2025 模式下载接口需要配置 vstkSigner');
+        }
+
+        $certId = $this->requireConfigString($this->config->certId, 'certId');
+        $signature = $signer->p7AttachSign($certId, $plainText);
+        if ($signature === '') {
+            throw new ZzbException('V-STK p7AttachSign 返回空签名');
+        }
+
+        return $this->normalizeP7Signature($signature);
+    }
+
+    private function normalizeP7Signature(string $signature): string
+    {
+        $compact = preg_replace('/\s+/', '', $signature);
+        if (is_string($compact) && $compact !== '' && base64_decode($compact, true) !== false) {
+            return $compact;
+        }
+
+        return base64_encode($signature);
+    }
+
+    private function requireConfigString(?string $value, string $name): string
+    {
+        if (!is_string($value) || $value === '') {
+            throw new ZzbException("缺少 {$name} 配置");
+        }
+
+        return $value;
+    }
+
     /**
      * @param ZzbQueryOrderResult $orderDetail
      * @param string[] $ticketNos
@@ -673,7 +760,7 @@ class ZzbService
      * @param array $headers HTTP headers
      * @return mixed
      */
-    private function post(string $url, array $data, bool $decodeJson = true, array $headers = [])
+    protected function post(string $url, array $data, bool $decodeJson = true, array $headers = [])
     {
         if ($this->config->interfaceKey) {
             $data = $this->sortSigningData($data);
@@ -763,7 +850,15 @@ class ZzbService
         }
 
         // 设置客户端证书
-        if ($this->config->certFile && $this->config->certFilePwd) {
+        if ($this->config->certFile && $this->config->keyFile) {
+            curl_setopt($ch, CURLOPT_SSLCERT, $this->config->certFile);
+            curl_setopt($ch, CURLOPT_SSLKEY, $this->config->keyFile);
+
+            $keyPwd = $this->config->keyFilePwd ?? $this->config->certFilePwd;
+            if ($keyPwd) {
+                curl_setopt($ch, CURLOPT_SSLKEYPASSWD, $keyPwd);
+            }
+        } elseif ($this->config->certFile && $this->config->certFilePwd) {
             $certPath = $this->config->certFile;
             $certPwd = $this->config->certFilePwd;
 

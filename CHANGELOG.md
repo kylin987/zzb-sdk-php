@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.0] - 2026-06-15
+
+- 增加 `Config::MODE_NETSALE_2025`，显式启用 2025 网售商协议；默认仍保留 1.x legacy 行为。
+- 增加 `ZzbSdk\Signer\VstkSignerInterface`，用于注入 V-STK `p7AttachSign()` 能力。
+- `netsale2025` 模式下，`reportTicket()` 按 2025 文档发送根级 `sendChannelCode` 和 `ticketList`。
+- `netsale2025` 模式下，`downloadReportRecord()` 使用毫秒时间戳签名原文并返回原始文件流。
+- 增加 `keyFile` / `keyFilePwd` 配置，支持 PEM 证书和私钥分离的双向 HTTPS 配置。
+- 增加网售商 2025 模式单元测试，确保 1.x 默认行为不被隐式切换。
+
 ## [0.1.0] - 2026-03-23
 
 - 抽离 `zzb-sdk-php` 为独立 Composer 包目录。
