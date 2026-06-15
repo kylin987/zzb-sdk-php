@@ -134,6 +134,7 @@ $service = new ZzbService($config);
 ```json
 {
   "data": {
+    "sendChannelCode": "98265004",
     "startShowDate": "2026-06-01",
     "endShowDate": "2026-06-02"
   },

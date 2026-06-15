@@ -171,6 +171,7 @@ class ZzbService
             $timestamp = $this->millisecondsTimestamp();
             $signPlain = [
                 'data' => [
+                    'sendChannelCode' => $channelCode,
                     'startShowDate' => $startShowDate,
                     'endShowDate' => $endShowDate,
                 ],

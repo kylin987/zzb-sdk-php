@@ -60,6 +60,7 @@ class Netsale2025ServiceTest extends TestCase
 
         $plain = json_decode($signer->plainText, true);
         $this->assertSame([
+            'sendChannelCode' => '98265004',
             'startShowDate' => '2026-06-01',
             'endShowDate' => '2026-06-02',
         ], $plain['data']);

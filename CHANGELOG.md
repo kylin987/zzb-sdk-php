@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 修正 `netsale2025` 模式下 `downloadReportRecord()` 的 V-STK 签名原文，`data` 内同步包含 `sendChannelCode` 以匹配平台验签原文。
+
 ## [2.0.0] - 2026-06-15
 
 - 增加 `Config::MODE_NETSALE_2025`，显式启用 2025 网售商协议；默认仍保留 1.x legacy 行为。
