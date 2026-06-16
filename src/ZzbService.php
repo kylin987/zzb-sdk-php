@@ -519,7 +519,7 @@ class ZzbService
             $signature = '';
             $algo = OPENSSL_ALGO_SHA256;
 
-            // 尝试 HMAC 签名 (针对 AppID 370100)
+            // 尝试 HMAC 签名（兼容旧专资接口）
             // 如果私钥加载失败或不是标准私钥，尝试使用配置中的接口密钥
             // 假设接口密钥存储在 config 中，这里暂不实现
 
