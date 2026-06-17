@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## [2.0.4] - 2026-06-17
 
 - 修正 `netsale2025` 模式下 `downloadReportRecord()` 的 V-STK 签名原文，`data` 内同步包含 `sendChannelCode` 以匹配平台验签原文。
+- 增加 `Config::httpLogger` 回调，`ZzbService::post()` 可记录请求 URL、HTTP 状态、请求体、响应原文和 JSON 解码结果，便于业务侧留存专资办原始响应。
 
 ## [2.0.0] - 2026-06-15
 

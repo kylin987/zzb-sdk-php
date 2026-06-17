@@ -95,6 +95,11 @@ class Config
      */
     public mixed $vstkSigner;
 
+    /**
+     * 可选 HTTP 日志回调。接收 ZzbService POST 请求、HTTP 状态和响应原文。
+     */
+    public mixed $httpLogger;
+
     public function __construct(array $config = [])
     {
         // 显式初始化所有属性为 null
@@ -115,6 +120,7 @@ class Config
         $this->interfaceKey = null;
         $this->proxy = null;
         $this->vstkSigner = null;
+        $this->httpLogger = null;
 
         // 从配置数组中赋值
         if (isset($config['mode'])) $this->mode = $config['mode'];
@@ -134,5 +140,6 @@ class Config
         if (isset($config['interfaceKey'])) $this->interfaceKey = $config['interfaceKey'];
         if (isset($config['proxy'])) $this->proxy = $config['proxy'];
         if (isset($config['vstkSigner'])) $this->vstkSigner = $config['vstkSigner'];
+        if (isset($config['httpLogger'])) $this->httpLogger = $config['httpLogger'];
     }
 }

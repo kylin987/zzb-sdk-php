@@ -767,10 +767,15 @@ class ZzbService
             $data = $this->sortSigningData($data);
         }
 
+        $requestBody = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
+        if ($requestBody === false) {
+            $requestBody = '';
+        }
+
         $ch = $this->initCurl();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $requestBody);
 
         $defaultHeaders = ['Content-Type: application/json'];
         $mergedHeaders = array_merge($defaultHeaders, $headers);
@@ -778,9 +783,31 @@ class ZzbService
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_errno($ch) ? curl_error($ch) : '';
+        $decodedResponse = null;
+        $jsonError = null;
 
-        if (curl_errno($ch)) {
-            throw new ZzbException('CURL Error: ' . curl_error($ch));
+        if ($decodeJson && is_string($response)) {
+            $decodedResponse = json_decode($response, true);
+            $jsonError = json_last_error() === JSON_ERROR_NONE ? null : json_last_error_msg();
+        }
+
+        $this->logHttpPost([
+            'url' => $url,
+            'method' => 'POST',
+            'headers' => $mergedHeaders,
+            'decode_json' => $decodeJson,
+            'request_body' => $requestBody,
+            'http_code' => $httpCode,
+            'curl_error' => $curlError,
+            'response_body' => $decodeJson && is_string($response) ? $response : null,
+            'response_body_bytes' => is_string($response) ? strlen($response) : 0,
+            'response_json' => $decodedResponse,
+            'json_error' => $jsonError,
+        ]);
+
+        if ($curlError !== '') {
+            throw new ZzbException('CURL Error: ' . $curlError);
         }
 
         if ($httpCode >= 400) {
@@ -788,10 +815,23 @@ class ZzbService
         }
 
         if ($decodeJson) {
-            return json_decode($response, true);
+            return $decodedResponse;
         }
 
         return $response;
+    }
+
+    private function logHttpPost(array $context): void
+    {
+        if (!is_callable($this->config->httpLogger)) {
+            return;
+        }
+
+        try {
+            ($this->config->httpLogger)($context);
+        } catch (\Throwable) {
+            // HTTP logging must never change SDK request behavior.
+        }
     }
 
     /**
